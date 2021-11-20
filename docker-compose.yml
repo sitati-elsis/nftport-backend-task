@@ -1,0 +1,44 @@
+version: '3.7'
+
+services:
+  postgres:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: backend
+    depends_on: [ postgres ]
+    command: ["flask", "run", "--host", "0.0.0.0"]
+    ports:
+      - "5000:5000"
+  ethereum:
+    image: "ethereum-api"
+    build:
+      context: web3_gateway
+      dockerfile: Dockerfile
+    command: node app.js
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.scraper
+    image: scraper
+    depends_on: [ postgres, ethereum ]
+    command:  ["python", "nftport_scraper.py"]
+    environment:
+      SQLALCHEMY_DATABASE_URI: postgresql://postgres:postgres@postgres:5432/postgres
+      TOKEN_GATEWAY: http://ethereum:3000
+
+volumes:
+  postgres-data:
