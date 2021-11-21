@@ -1,9 +1,7 @@
-from flask import request, render_template, make_response, jsonify
-from datetime import datetime as dt
+from flask import request, make_response, jsonify
 from flask import current_app as app
-from .models import db, Nft, Contract, NftSchema
-import json
-from flask import Flask, send_from_directory
+from .models import Nft, NftSchema
+from flask import send_from_directory
 import os.path
 # Use folder called 'assets' sitting next to app.py module.
 assets_folder = os.path.join(app.root_path, 'assets')

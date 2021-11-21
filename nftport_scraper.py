@@ -4,6 +4,7 @@ import urllib.request
 from application.models import Nft, Contract
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import logging
 import os
 import json
 import concurrent
@@ -15,35 +16,38 @@ AUTH_HEADER = {"Authorization": "721c8e6c-4bc0-4ded-8c07-0350ce4b2430"}
 
 engine = create_engine(os.getenv("SQLALCHEMY_DATABASE_URI", "postgresql://postgres:postgres@postgres/postgres"))
 
+
 DBSession = sessionmaker(bind=engine)
+
+logger = logging.getLogger(__name__)
+
 
 class BadRequest(Exception):
     pass
 
+
 def scrape_contract_nfts(contract_address: AnyStr):
-    print(f"Starting to scrape nft for contract: {contract_address}")
-    contract, nfts =  get_contract_nfts(contract_address)
-    print("saving contract")
+    logger.info(f"Starting to scrape nft for contract: {contract_address}")
+    contract, nfts = get_contract_nfts(contract_address)
+    logger.info(f"Saving contract for contract {contract_address}")
     save_contract(contract)
-    print("finished saving contract")
+    logger.info(f"finished saving contract for {contract_address}")
     for nft in nfts:
         try:
             token_uri = get_token_uri(nft)
-            print("GOT IT", token_uri)
             nft_metadata = scrape_ipfs_token_metadata(token_uri)
             nft["token_uri"] = token_uri
             nft.update(nft_metadata)
-            # Download the image
             # Save  NFT
             save_nft(nft)
         except TypeError:
-            print("Skipping inavlid token uri")
+            logger.info("Skipping invalid token uri")
             continue
         except BadRequest as e:
-            print("Skipping inavlid token request")
-            print(e)
+            logger.info("Skipping invalid token request")
+            logger.info(e)
             continue
-    print(f"Starting to scrape nft for contract: {contract_address}")
+    logger.info(f"Starting to scrape nft for contract: {contract_address}")
 
 
 def save_nft(nft):
@@ -55,6 +59,7 @@ def save_nft(nft):
         session.add(new_nft)
         session.commit()
         session.close()
+        # Download the image
         download_nft_assets(nft["image"])
 
 
@@ -72,7 +77,6 @@ def get_contract_nfts(contract_address: AnyStr):
     page_number = 1
     nfts = []
     contract = None
-    print("Getting contract NFTS")
     while True:
         results = scrape_contract_nft_by_page(contract_address, page_number)
         if results["response"] != 'OK':
@@ -87,7 +91,6 @@ def get_contract_nfts(contract_address: AnyStr):
             contract["contract_address"] = contract_address
         # Continue
         page_number += 1
-    print(f"Finished contract NFTS", contract, nfts)
     return contract, nfts
 
 
@@ -122,7 +125,6 @@ def get_token_uri(nft):
     }
     TOKEN_GATEWAY = os.getenv("TOKEN_GATEWAY", "http://localhost:3000")
     result = post(f"{TOKEN_GATEWAY}/get-token-uri", headers=HEADERS, json=payload)
-    print(result.status_code, result.json(), nft["contract_address"])
     if result.status_code == 400:
         raise BadRequest("missing revert data in call exception")
     return result.json()["token_uri"]
@@ -138,10 +140,9 @@ def scrape_contracts():
     with open("collections.json", "r") as f:
         contracts = json.load(f)
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            tasks = [executor.submit(scrape_contract_nfts, contract)for contract in contracts]
+            tasks = [executor.submit(scrape_contract_nfts, contract) for contract in contracts]
             for task in concurrent.futures.as_completed(tasks):
-                print(task.result())
-
+                logger.info(task.result())
 
 
 scrape_contracts()
